@@ -1,0 +1,1366 @@
+openapi: 3.1.0
+
+info:
+  title: Identity Service
+  version: 2.0.0
+  description: >
+    Central identity and access management service.
+    Handles member registration, authentication (email/password + social OAuth),
+    legacy member migration, session management, token verification,
+    organisational hierarchy, group management, and permissions.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+components:
+  schemas:
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:      { type: string }
+            message:   { type: string }
+            requestId: { type: string }
+            details:
+              type: array
+              items:
+                type: object
+                properties:
+                  field:   { type: string }
+                  message: { type: string }
+                required: [message]
+          required: [code, message, requestId, details]
+      required: [error]
+
+    TokenPair:
+      type: object
+      properties:
+        accessToken:  { type: string }
+        refreshToken: { type: string }
+      required: [accessToken, refreshToken]
+
+    MigrationRequired:
+      type: object
+      properties:
+        status:         { type: string, enum: [migration_required] }
+        message:        { type: string }
+        migrationToken: { type: string }
+        options:
+          type: array
+          items: { type: string, enum: [google, apple, facebook] }
+      required: [status, message, migrationToken, options]
+
+    Installation:
+      type: object
+      properties:
+        id:         { type: string }
+        name:       { type: string }
+        code:       { type: string }
+        timezone:   { type: string }
+        is_active:  { type: boolean }
+        created_at: { type: string, format: date-time }
+      required: [id, name, code, timezone, is_active, created_at]
+
+    Nation:
+      type: object
+      properties:
+        id:                { type: string }
+        installation_id:   { type: string }
+        installation_name: { type: string, nullable: true }
+        installation_code: { type: string, nullable: true }
+        name:              { type: string }
+        description:       { type: string, nullable: true }
+        is_active:         { type: boolean }
+        created_at:        { type: string, format: date-time }
+      required: [id, installation_id, name, is_active, created_at]
+
+    Tribe:
+      type: object
+      properties:
+        id:                { type: string }
+        nation_id:         { type: string }
+        nation_name:       { type: string, nullable: true }
+        installation_name: { type: string, nullable: true }
+        installation_code: { type: string, nullable: true }
+        name:              { type: string }
+        description:       { type: string, nullable: true }
+        is_active:         { type: boolean }
+        created_at:        { type: string, format: date-time }
+      required: [id, nation_id, name, is_active, created_at]
+
+    WorkforceTeam:
+      type: object
+      properties:
+        id:          { type: string }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        is_active:   { type: boolean }
+        created_at:  { type: string, format: date-time }
+      required: [id, name, is_active, created_at]
+
+    Member:
+      type: object
+      properties:
+        id:                  { type: string }
+        email:               { type: string }
+        first_name:          { type: string }
+        last_name:           { type: string }
+        phone:               { type: string, nullable: true }
+        address:             { type: string, nullable: true }
+        date_of_birth:       { type: string, nullable: true }
+        status:              { type: string, enum: [active, inactive, suspended] }
+        role_name:           { type: string, nullable: true }
+        placement_complete:  { type: boolean }
+        installation_id:     { type: string, nullable: true }
+        installation_name:   { type: string, nullable: true }
+        installation_code:   { type: string, nullable: true }
+        nation_id:           { type: string, nullable: true }
+        nation_name:         { type: string, nullable: true }
+        tribe_id:            { type: string, nullable: true }
+        tribe_name:          { type: string, nullable: true }
+        workforce_team_id:   { type: string, nullable: true }
+        workforce_team_name: { type: string, nullable: true }
+        created_at:          { type: string, format: date-time }
+        updated_at:          { type: string, format: date-time }
+      required: [id, email, first_name, last_name, status, placement_complete, created_at]
+
+    Group:
+      type: object
+      properties:
+        id:           { type: string }
+        name:         { type: string }
+        description:  { type: string, nullable: true }
+        is_active:    { type: boolean }
+        member_count: { type: integer }
+        created_at:   { type: string, format: date-time }
+      required: [id, name, is_active, created_at]
+
+    MemberGroup:
+      type: object
+      properties:
+        id:          { type: string }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        joined_at:   { type: string, format: date-time }
+      required: [id, name, joined_at]
+
+    Role:
+      type: object
+      properties:
+        id:          { type: string }
+        name:        { type: string, enum: [superadmin, admin, operator, user, custom] }
+        description: { type: string, nullable: true }
+        created_at:  { type: string, format: date-time }
+      required: [id, name, created_at]
+
+    Scope:
+      type: object
+      properties:
+        id:          { type: string }
+        name:        { type: string, description: "Format: app.resource.action" }
+        description: { type: string, nullable: true }
+        is_global:   { type: boolean }
+        is_archived: { type: boolean }
+        created_at:  { type: string, format: date-time }
+      required: [id, name, is_global, is_archived, created_at]
+
+    MemberScope:
+      type: object
+      properties:
+        scope_id:    { type: string }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+        is_global:   { type: boolean }
+        granted_by:  { type: string, nullable: true }
+        granted_at:  { type: string, format: date-time }
+      required: [scope_id, name, is_global, granted_at]
+
+    RoleScope:
+      type: object
+      properties:
+        scope_id:    { type: string }
+        name:        { type: string }
+        description: { type: string, nullable: true }
+      required: [scope_id, name]
+
+    Pagination:
+      type: object
+      properties:
+        total:  { type: integer }
+        limit:  { type: integer }
+        offset: { type: integer }
+      required: [total, limit, offset]
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        JWT issued by the identity service.
+        Obtain via /v1/auth/register, /v1/auth/login, or OAuth flows.
+
+paths:
+
+  /health:
+    get:
+      summary: Health check
+      operationId: getHealth
+      tags: [System]
+      responses:
+        '200': { description: Healthy }
+        '503': { description: Degraded }
+
+  /v1/.well-known/jwks.json:
+    get:
+      summary: JSON Web Key Set
+      operationId: getJwks
+      tags: [System]
+      responses:
+        '200':
+          description: JWKS
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  keys: { type: array, items: { type: object } }
+
+  /v1/auth/register/installation:
+    get:
+      summary: Resolve installation code to UUID
+      operationId: resolveInstallation
+      tags: [Auth]
+      description: Public endpoint. Called by the frontend before rendering the registration form.
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Installation resolved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Installation' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/register:
+    post:
+      summary: Register a new member
+      operationId: register
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, firstName, lastName, installationId]
+              properties:
+                email:           { type: string, format: email }
+                password:        { type: string, minLength: 8 }
+                firstName:       { type: string, minLength: 1 }
+                lastName:        { type: string, minLength: 1 }
+                installationId:  { type: string }
+                nationId:        { type: string }
+                tribeId:         { type: string }
+                workforceTeamId: { type: string }
+                phone:           { type: string }
+                address:         { type: string }
+                dateOfBirth:     { type: string, format: date }
+      responses:
+        '201':
+          description: Registered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TokenPair' }
+        '400': { description: Validation error or invalid installation, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: Email already taken, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/login:
+    post:
+      summary: Login
+      operationId: login
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Authenticated or migration required
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/TokenPair' }
+                  - $ref: '#/components/schemas/MigrationRequired'
+        '401': { description: Invalid credentials, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/migrate/password:
+    post:
+      summary: Set password for legacy member
+      operationId: migratePassword
+      tags: [Migration]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [migrationToken, password]
+              properties:
+                migrationToken: { type: string }
+                password:       { type: string, minLength: 8 }
+      responses:
+        '200':
+          description: Migrated and authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/TokenPair' }
+        '400': { description: Invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/migrate/oauth/{provider}:
+    get:
+      summary: Start OAuth migration
+      operationId: migrateOAuthStart
+      tags: [Migration]
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [google, apple, facebook] } }
+        - { name: migrationToken, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        '302': { description: Redirect to provider }
+
+  /v1/auth/migrate/oauth/{provider}/callback:
+    get:
+      summary: OAuth migration callback
+      operationId: migrateOAuthCallback
+      tags: [Migration]
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [google, apple, facebook] } }
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        '302': { description: Redirect to frontend with tokens }
+
+  /v1/auth/oauth/{provider}:
+    get:
+      summary: Initiate social OAuth login
+      operationId: oauthStart
+      tags: [OAuth]
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [google, apple, facebook] } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+        - { name: installationCode, in: query, required: false, schema: { type: string }, description: Installation code from registration URL }
+      responses:
+        '302': { description: Redirect to provider }
+
+  /v1/auth/oauth/{provider}/callback:
+    get:
+      summary: OAuth callback
+      operationId: oauthCallback
+      tags: [OAuth]
+      parameters:
+        - { name: provider, in: path, required: true, schema: { type: string, enum: [google, apple, facebook] } }
+        - { name: code, in: query, required: true, schema: { type: string } }
+        - { name: state, in: query, required: true, schema: { type: string } }
+      responses:
+        '302': { description: Redirect to frontend with tokens }
+
+  /v1/auth/password/forgot:
+    post:
+      summary: Request password reset email
+      operationId: forgotPassword
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200': { description: Reset email sent if account exists }
+
+  /v1/auth/password/reset:
+    post:
+      summary: Reset password
+      operationId: resetPassword
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, password]
+              properties:
+                token:    { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        '204': { description: Password reset }
+        '400': { description: Invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/session/refresh:
+    post:
+      summary: Refresh access token
+      operationId: refreshSession
+      tags: [Session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '200':
+          description: New access token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      accessToken: { type: string }
+        '401': { description: Invalid token, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/auth/session/logout:
+    post:
+      summary: Logout
+      operationId: logout
+      tags: [Session]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken: { type: string }
+      responses:
+        '204': { description: Logged out }
+
+  /v1/org/installations:
+    post:
+      summary: Create installation
+      operationId: createInstallation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, code]
+              properties:
+                name:     { type: string, minLength: 1 }
+                code:     { type: string, minLength: 1 }
+                timezone: { type: string, default: UTC }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Installation' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: Code exists, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List installations
+      operationId: listInstallations
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Installation' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/installations/{id}:
+    get:
+      summary: Get installation by ID
+      operationId: getInstallation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Installation
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Installation' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate installation
+      operationId: deleteInstallation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/nations:
+    post:
+      summary: Create nation
+      operationId: createNation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, installationId]
+              properties:
+                name:           { type: string, minLength: 1 }
+                installationId: { type: string }
+                description:    { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Nation' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List nations
+      operationId: listNations
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: installationId, in: query, required: false, schema: { type: string } }]
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Nation' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/nations/{id}:
+    get:
+      summary: Get nation by ID
+      operationId: getNation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Nation with installation context
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Nation' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate nation
+      operationId: deleteNation
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/tribes:
+    post:
+      summary: Create tribe
+      operationId: createTribe
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, nationId]
+              properties:
+                name:        { type: string, minLength: 1 }
+                nationId:    { type: string }
+                description: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tribe' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List tribes
+      operationId: listTribes
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: nationId, in: query, required: false, schema: { type: string } }]
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Tribe' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/tribes/{id}:
+    get:
+      summary: Get tribe by ID
+      operationId: getTribe
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Tribe with nation and installation context
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Tribe' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate tribe
+      operationId: deleteTribe
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/workforce-teams:
+    post:
+      summary: Create workforce team
+      operationId: createWorkforceTeam
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/WorkforceTeam' }
+        '400': { description: Validation error, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List workforce teams
+      operationId: listWorkforceTeams
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: List
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/WorkforceTeam' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/org/workforce-teams/{id}:
+    get:
+      summary: Get workforce team by ID
+      operationId: getWorkforceTeam
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Workforce team
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/WorkforceTeam' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate workforce team
+      operationId: deleteWorkforceTeam
+      tags: [Organisation]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members:
+    get:
+      summary: List members
+      operationId: listMembers
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: installationId, in: query, required: false, schema: { type: string } }
+        - { name: nationId, in: query, required: false, schema: { type: string } }
+        - { name: tribeId, in: query, required: false, schema: { type: string } }
+        - { name: workforceTeamId, in: query, required: false, schema: { type: string } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [active, inactive, suspended] } }
+        - { name: limit, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+        - { name: offset, in: query, required: false, schema: { type: integer, minimum: 0, default: 0 } }
+      responses:
+        '200':
+          description: Paginated member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Member' } }
+                  meta: { $ref: '#/components/schemas/Pagination' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}:
+    get:
+      summary: Get member by ID
+      operationId: getMember
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Member with placement context
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Member' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}/placement:
+    patch:
+      summary: Update member placement
+      operationId: updateMemberPlacement
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      description: >
+        Updates organisational placement. All fields optional.
+        placement_complete is automatically set when installation_id is present.
+        Refresh tokens revoked on update.
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                installationId:  { type: string }
+                nationId:        { type: string }
+                tribeId:         { type: string }
+                workforceTeamId: { type: string }
+      responses:
+        '200':
+          description: Updated member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Member' }
+        '400': { description: Invalid installation, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}/interest-groups:
+    get:
+      summary: List member interest groups
+      operationId: getMemberInterestGroups
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Interest groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/MemberGroup' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    post:
+      summary: Assign member to interest groups
+      operationId: assignMemberInterestGroups
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupIds]
+              properties:
+                groupIds: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        '204': { description: Assigned }
+        '400': { description: Invalid group IDs, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}/interest-groups/{groupId}:
+    delete:
+      summary: Remove member from interest group
+      operationId: removeMemberInterestGroup
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: groupId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Removed }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}/affinity-groups:
+    get:
+      summary: List member affinity groups
+      operationId: getMemberAffinityGroups
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Affinity groups
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/MemberGroup' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    post:
+      summary: Assign member to affinity groups
+      operationId: assignMemberAffinityGroups
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [groupIds]
+              properties:
+                groupIds: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        '204': { description: Assigned }
+        '400': { description: Invalid group IDs, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/members/{id}/affinity-groups/{groupId}:
+    delete:
+      summary: Remove member from affinity group
+      operationId: removeMemberAffinityGroup
+      tags: [Members]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: groupId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Removed }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/groups/interest:
+    post:
+      summary: Create interest group
+      operationId: createInterestGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: Name exists, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List interest groups
+      operationId: listInterestGroups
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: includeInactive, in: query, required: false, schema: { type: string, enum: ['true', 'false'] } }]
+      responses:
+        '200':
+          description: List with member counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Group' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/groups/interest/{id}:
+    get:
+      summary: Get interest group by ID
+      operationId: getInterestGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Group with member count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    patch:
+      summary: Update interest group
+      operationId: updateInterestGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+                isActive:    { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '400': { description: No fields, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate interest group
+      operationId: deleteInterestGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/groups/affinity:
+    post:
+      summary: Create affinity group
+      operationId: createAffinityGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: Name exists, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    get:
+      summary: List affinity groups
+      operationId: listAffinityGroups
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: includeInactive, in: query, required: false, schema: { type: string, enum: ['true', 'false'] } }]
+      responses:
+        '200':
+          description: List with member counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Group' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/groups/affinity/{id}:
+    get:
+      summary: Get affinity group by ID
+      operationId: getAffinityGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Group with member count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    patch:
+      summary: Update affinity group
+      operationId: updateAffinityGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+                isActive:    { type: boolean }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Group' }
+        '400': { description: No fields, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    delete:
+      summary: Deactivate affinity group
+      operationId: deleteAffinityGroup
+      tags: [Groups]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses:
+        '204': { description: Deactivated }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/scopes:
+    get:
+      summary: List all scopes
+      operationId: listScopes
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: includeArchived, in: query, required: false, schema: { type: boolean } }]
+      responses:
+        '200':
+          description: Scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Scope' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    post:
+      summary: Create a scope
+      operationId: createScope
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string, minLength: 1 }
+                description: { type: string }
+                isGlobal:    { type: boolean }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Scope' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '409': { description: Name exists, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/scopes/{scopeId}/archive:
+    patch:
+      summary: Archive a scope
+      operationId: archiveScope
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: scopeId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Archived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Scope' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/scopes/{scopeId}/restore:
+    patch:
+      summary: Restore an archived scope
+      operationId: restoreScope
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: scopeId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Scope' }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/roles:
+    get:
+      summary: List all roles
+      operationId: listRoles
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Roles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Role' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/roles/{roleId}/scopes:
+    get:
+      summary: List scopes for a role
+      operationId: getRoleScopes
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: roleId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Role scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/RoleScope' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/members/{memberId}/role:
+    post:
+      summary: Assign role to member
+      operationId: assignRole
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: memberId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role: { type: string, enum: [superadmin, admin, operator, user] }
+      responses:
+        '204': { description: Role assigned }
+        '400': { description: Invalid role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/members/{memberId}/scopes:
+    get:
+      summary: View member individual scope grants
+      operationId: getMemberScopes
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: memberId, in: path, required: true, schema: { type: string } }]
+      responses:
+        '200':
+          description: Member scopes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/MemberScope' } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+    post:
+      summary: Grant scopes to member
+      operationId: grantMemberScopes
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: memberId, in: path, required: true, schema: { type: string } }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scopes]
+              properties:
+                scopes: { type: array, items: { type: string }, minItems: 1 }
+      responses:
+        '204': { description: Granted }
+        '400': { description: Unknown scope, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '404': { description: Member not found, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+
+  /v1/permissions/members/{memberId}/scopes/{scopeId}:
+    delete:
+      summary: Revoke scope from member
+      operationId: revokeMemberScope
+      tags: [Permissions]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: memberId, in: path, required: true, schema: { type: string } }
+        - { name: scopeId, in: path, required: true, schema: { type: string } }
+      responses:
+        '204': { description: Revoked }
+        '401': { description: Unauthorized, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
+        '403': { description: Insufficient role, content: { application/json: { schema: { $ref: '#/components/schemas/ErrorResponse' } } } }
