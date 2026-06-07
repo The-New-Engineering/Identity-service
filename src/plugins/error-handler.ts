@@ -51,6 +51,7 @@ export default fp(async (app: FastifyInstance) => {
 
     // Fastify validation errors — field-level detail
     if (error.validation) {
+      app.log.warn({ err: error, requestId }, 'Validation error')
       return reply.status(400).send(
         buildError(
           'VALIDATION_ERROR',
@@ -76,13 +77,31 @@ export default fp(async (app: FastifyInstance) => {
 
     // Known application errors thrown with a statusCode
     if (statusCode < 500) {
+       app.log.warn(
+        { err: error, requestId, statusCode, code: error.code ?? 'CLIENT_ERROR' },
+        `Client error ${statusCode}: ${error.message}`
+      )
       return reply.status(statusCode).send(
         buildError(error.code ?? 'CLIENT_ERROR', error.message, requestId)
       )
     }
 
     // Unknown server errors — log full detail, return safe message
-    app.log.error({ err: error, requestId }, 'Unhandled error')
+     app.log.error(
+      {
+        err: {
+          message: error.message,
+          stack:   error.stack,
+          code:    error.code,
+          name:    error.name,
+        },
+        requestId,
+        method:     req.method,
+        url:        req.url,
+        statusCode: 500,
+      },
+      `Unhandled server error: ${error.message}`
+    )
     return reply.status(500).send(
       buildError('INTERNAL_ERROR', 'An unexpected error occurred', requestId)
     )
