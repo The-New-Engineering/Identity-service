@@ -64,12 +64,16 @@ export function requireAuth(scope?: string) {
     const authHeader = req.headers.authorization
 
     if (!authHeader?.startsWith('Bearer ')) {
+      req.log.warn(
+        { requestId: req.id, method: req.method, url: req.url, code: 'MISSING_TOKEN' },
+        'Auth rejected — missing Bearer token'
+      )
       return reply.status(401).send({
         error: {
-          code: 'MISSING_TOKEN',
-          message: 'Authorization header with Bearer token is required',
+          code:      'MISSING_TOKEN',
+          message:   'Authorization header with Bearer token is required',
           requestId: req.id,
-          details: [],
+          details:   [],
         },
       })
     }
@@ -78,28 +82,53 @@ export function requireAuth(scope?: string) {
 
     try {
       const publicKey = req.server.config.JWT_PUBLIC_KEY.replace(/\\n/g, '\n')
-      const payload = jwt.verify(token, publicKey, {
+      const payload   = jwt.verify(token, publicKey, {
         algorithms: ['RS256'],
       }) as AuthenticatedMember
 
-      // Scope check
       if (scope && !hasAccess(payload.scopes ?? [], scope)) {
+        req.log.warn(
+          {
+            requestId: req.id,
+            method:    req.method,
+            url:       req.url,
+            memberId:  payload.sub,
+            role:      payload.role,
+            required:  scope,
+            held:      payload.scopes,
+            code:      'INSUFFICIENT_SCOPE',
+          },
+          `Auth rejected — insufficient scope, required: ${scope}`
+        )
         return reply.status(403).send({
           error: {
-            code: 'INSUFFICIENT_SCOPE',
-            message: `This action requires the "${scope}" scope`,
+            code:      'INSUFFICIENT_SCOPE',
+            message:   `This action requires the "${scope}" scope`,
             requestId: req.id,
-            details: [],
+            details:   [],
           },
         })
       }
 
       req.member = payload
+
     } catch (err: any) {
       const isExpired = err?.name === 'TokenExpiredError'
+      const code      = isExpired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN'
+
+      req.log.warn(
+        {
+          requestId: req.id,
+          method:    req.method,
+          url:       req.url,
+          code,
+          reason:    err?.message,
+        },
+        `Auth rejected — ${isExpired ? 'token expired' : 'invalid token'}`
+      )
       return reply.status(401).send({
         error: {
-          code: isExpired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
+          code,
           message: isExpired ? 'Token has expired' : 'Invalid token',
           requestId: req.id,
           details: [],
@@ -125,12 +154,21 @@ export function requireRole(role: string) {
     const authHeader = req.headers.authorization
 
     if (!authHeader?.startsWith('Bearer ')) {
+      req.log.warn(
+        {
+          requestId: req.id,
+          method:    req.method,
+          url:       req.url,
+          code:      'MISSING_TOKEN',
+        },
+        'Role check rejected — missing Bearer token'
+      )
       return reply.status(401).send({
         error: {
-          code: 'MISSING_TOKEN',
-          message: 'Authorization header with Bearer token is required',
+          code:      'MISSING_TOKEN',
+          message:   'Authorization header with Bearer token is required',
           requestId: req.id,
-          details: [],
+          details:   [],
         },
       })
     }
@@ -139,30 +177,55 @@ export function requireRole(role: string) {
 
     try {
       const publicKey = req.server.config.JWT_PUBLIC_KEY.replace(/\\n/g, '\n')
-      const payload = jwt.verify(token, publicKey, {
+      const payload   = jwt.verify(token, publicKey, {
         algorithms: ['RS256'],
       }) as AuthenticatedMember
 
       if (!hasRole(payload.role, role)) {
+        req.log.warn(
+          {
+            requestId:    req.id,
+            method:       req.method,
+            url:          req.url,
+            memberId:     payload.sub,
+            memberRole:   payload.role,
+            requiredRole: role,
+            code:         'INSUFFICIENT_ROLE',
+          },
+          `Role check rejected — member has "${payload.role}", requires "${role}" or above`
+        )
         return reply.status(403).send({
           error: {
-            code: 'INSUFFICIENT_ROLE',
-            message: `This action requires the "${role}" role or above`,
+            code:      'INSUFFICIENT_ROLE',
+            message:   `This action requires the "${role}" role or above`,
             requestId: req.id,
-            details: [],
+            details:   [],
           },
         })
       }
 
       req.member = payload
+
     } catch (err: any) {
       const isExpired = err?.name === 'TokenExpiredError'
+      const code      = isExpired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN'
+
+      req.log.warn(
+        {
+          requestId: req.id,
+          method:    req.method,
+          url:       req.url,
+          code,
+          reason:    err?.message,
+        },
+        `Role check rejected — ${isExpired ? 'token expired' : 'invalid token'}`
+      )
       return reply.status(401).send({
         error: {
-          code: isExpired ? 'TOKEN_EXPIRED' : 'INVALID_TOKEN',
-          message: isExpired ? 'Token has expired' : 'Invalid token',
+          code,
+          message:   isExpired ? 'Token has expired' : 'Invalid token',
           requestId: req.id,
-          details: [],
+          details:   [],
         },
       })
     }
