@@ -36,6 +36,7 @@ export async function buildApp() {
             level: 'warn',
             options: {
               sourceToken: process.env.BETTERSTACK_SOURCE_TOKEN,
+              options: { endpoint: process.env.BETTERSTACK_INGESTING_HOST },
             },
           },
         ],
