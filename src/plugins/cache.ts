@@ -6,6 +6,7 @@ export default fp(async (app: FastifyInstance) => {
   const redis = new Redis(app.config.REDIS_URL, {
     maxRetriesPerRequest: 3,
     lazyConnect: true,
+    tls: app.config.REDIS_URL.startsWith('rediss://') ? {} : undefined,
   })
 
   try {
