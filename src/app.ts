@@ -9,6 +9,13 @@ import v1Router     from './routes/v1'
 import internalRoute from './routes/v1/internal'
 
 function buildLogger() {
+  try {
+    require('@logtail/pino')
+    console.log('Success: @logtail/pino resolved.')
+  } catch (err) {
+    console.error('Failed: @logtail/pino failed to load:', err)
+  }
+
   const level = process.env.LOG_LEVEL ?? 'info'
 
   if (process.env.NODE_ENV === 'development') {
@@ -46,6 +53,8 @@ export async function buildApp() {
     logger: buildLogger(),
     genReqId: () => crypto.randomUUID(),
   })
+
+  app.log.warn({ test: true }, 'Logger transport test — if you see this in Better Stack it is working')
 
   await app.register(envPlugin)
   await app.register(dbPlugin)
